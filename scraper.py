@@ -12,8 +12,8 @@ class Hdhub4uScraper:
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
                 context = await browser.new_context()
-                context.set_default_navigation_timeout(90000) # 90 second timeout for navigation
-                context.set_default_timeout(90000) # 90 second timeout for actions
+                context.set_default_navigation_timeout(90000)
+                context.set_default_timeout(60000)
                 page = await context.new_page()
                 print("Connection successful!")
             except Exception as e:
@@ -21,18 +21,17 @@ class Hdhub4uScraper:
                 raise
 
             try:
-                # Phase 1: Search for the movie
+                # स्टेप 1 & 2: मूवी खोजना और उसके पेज पर जाना
                 search_url = f"https://hdhub4u.pictures/?s={movie_name.replace(' ', '+')}"
                 print(f"Navigating to search page: {search_url}")
                 await page.goto(search_url, wait_until="domcontentloaded")
 
-                # Phase 2: Find the correct movie link
                 movie_link_element = page.locator("ul.recent-movies li.thumb figcaption a").first
                 try:
-                    await movie_link_element.wait_for(state="visible", timeout=10000)
+                    await movie_link_element.wait_for(state="visible", timeout=15000)
                     movie_page_url = await movie_link_element.get_attribute("href")
                 except Exception:
-                    raise Exception("Movie not found on the search page. No results.")
+                    raise Exception(f"Movie '{movie_name}' not found on the search page.")
 
                 if not movie_page_url:
                     raise Exception("Movie link could not be extracted.")
@@ -40,37 +39,26 @@ class Hdhub4uScraper:
                 print(f"Movie found! Navigating to movie page: {movie_page_url}")
                 await page.goto(movie_page_url, wait_until="domcontentloaded")
                 
-                # Phase 3: Extract intermediate links
-                print("Extracting intermediate links...")
-                link_locators = page.locator("main.page-body h3 > a")
-                count = await link_locators.count()
+                # स्टेप 3: सिर्फ 720p वाले लिंक को ढूंढना
+                print("Searching for the '720p' link...")
+                # locator को और सटीक बनाया गया है
+                link_720p = page.locator("main.page-body h3 > a:has-text('720p')").first
                 
-                intermediate_links = {}
-                for i in range(count):
-                    element = link_locators.nth(i)
-                    text = await element.inner_text()
-                    href = await element.get_attribute("href")
-                    if href and ("viralkhabarbull.com" in href or "hblinks.dad" in href):
-                        quality = text.split('[')[0].strip().replace('⚡', '')
-                        intermediate_links[quality] = href
-                
-                if not intermediate_links:
-                    raise Exception("No initial download links (like viralkhabarbull) found on the movie page.")
-                
-                print(f"Found intermediate links: {intermediate_links}")
+                try:
+                    await link_720p.wait_for(state="visible", timeout=10000)
+                except Exception:
+                    raise Exception("720p link not found on the movie page.")
 
-                # Phase 4: Solve the puzzle for each link, one by one
-                final_links = {}
-                for quality, url in intermediate_links.items():
-                    if "viralkhabarbull.com" in url:
-                        result = await self.solve_puzzle_like_a_human(context, quality, url)
-                        if result:
-                            final_links.update(result)
-                    else:
-                        # If it's already a final link, just add it
-                        final_links[quality] = url
+                intermediate_url = await link_720p.get_attribute("href")
+                quality_text = await link_720p.inner_text()
+                quality = quality_text.split('[')[0].strip().replace('⚡', '')
 
-                return final_links
+                print(f"Found target link for '{quality}': {intermediate_url}")
+
+                # स्टेप 4: सिर्फ एक पहेली को सॉल्व करना
+                final_link_data = await self.solve_puzzle_like_a_human(context, quality, intermediate_url)
+                
+                return final_link_data
 
             finally:
                 print("Closing browser connection.")
@@ -79,36 +67,39 @@ class Hdhub4uScraper:
     async def solve_puzzle_like_a_human(self, context, quality, url):
         page = None
         try:
-            # Create a new page for each puzzle to keep things clean
             page = await context.new_page()
             
             print(f"--- Solving for [{quality}] ---")
             print(f"Navigating to: {url}")
             await page.goto(url, wait_until="domcontentloaded")
             
-            # Wait for the redirect to the main puzzle page
+            print("Waiting for Cloudflare challenge or redirect...")
             await page.wait_for_url("**/homelander/**", timeout=30000)
-            print("Redirect successful. On the puzzle page.")
+            print("Cloudflare passed! On the puzzle page.")
 
-            # --- Handle "Click to Continue" button and its pop-up ---
+            # --- "Click to Continue" को इंसान की तरह हैंडल करना ---
             continue_button = page.locator("#verify_btn:has-text('Click To Continue')")
-            await continue_button.wait_for(state="visible", timeout=10000)
+            await continue_button.wait_for(state="visible", timeout=15000)
             
-            print("Waiting for pop-up after first click...")
-            async with context.expect_page() as popup_info:
-                await continue_button.click()
-            
-            popup_page = await popup_info.value
-            await popup_page.wait_for_load_state("domcontentloaded", timeout=20000)
-            print(f"Pop-up appeared: {popup_page.url}. Closing it.")
-            await popup_page.close()
-            print("Returned to main page.")
+            print("Preparing to click and handle potential pop-up...")
+            try:
+                async with context.expect_page(timeout=5000) as popup_info:
+                    await continue_button.click()
+                
+                popup_page = await popup_info.value
+                await popup_page.wait_for_load_state("domcontentloaded", timeout=20000)
+                print(f"Pop-up appeared: {popup_page.url}. Closing it.")
+                await popup_page.close()
+            except asyncio.TimeoutError:
+                print("No pop-up on first click. Continuing.")
+                pass
 
-            # --- Wait for timer and "Get Links" button ---
+            print("Returned to main page. Waiting for timer...")
+
+            # --- टाइमर और "Get Links" बटन ---
             get_links_button = page.locator("a.get-link:has-text('Get Links')")
-            print("Waiting for the timer and 'Get Links' button...")
             await get_links_button.wait_for(state="visible", timeout=15000)
-            print("'Get Links' button is visible.")
+            print("'Get Links' button is now visible.")
 
             final_url = await get_links_button.get_attribute("href")
             print(f"SUCCESS for [{quality}]! Final URL: {final_url}")
