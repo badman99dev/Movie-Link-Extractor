@@ -13,6 +13,9 @@ class Hdhub4uScraper:
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
                 context = await browser.new_context()
+                # context के लिए एक डिफ़ॉल्ट टाइमआउट सेट कर देते हैं
+                context.set_default_navigation_timeout(60000) # 60 सेकंड
+                context.set_default_timeout(60000) # 60 सेकंड
                 page = await context.new_page()
                 print("Connection successful!")
             except Exception as e:
@@ -22,7 +25,7 @@ class Hdhub4uScraper:
             try:
                 search_url = f"https://hdhub4u.pictures/?s={movie_name.replace(' ', '+')}"
                 print(f"Navigating to search page: {search_url}")
-                await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+                await page.goto(search_url, wait_until="domcontentloaded")
 
                 movie_link_element = page.locator("ul.recent-movies li.thumb figcaption a").first
                 try:
@@ -35,7 +38,7 @@ class Hdhub4uScraper:
                     raise Exception("Movie link could not be extracted.")
 
                 print(f"Movie found! Navigating to movie page: {movie_page_url}")
-                await page.goto(movie_page_url, wait_until="domcontentloaded", timeout=60000)
+                await page.goto(movie_page_url, wait_until="domcontentloaded")
                 
                 print("Extracting intermediate links...")
                 link_locators = page.locator("main.page-body h3 > a")
@@ -80,7 +83,8 @@ class Hdhub4uScraper:
             final_url = await self.solve_viralkhabarbull_strict(context, url)
             return {quality: final_url}
         except Exception as e:
-            error_message = f"Error: {type(e).__name__} - {str(e).splitlines()[0]}"
+            # हम एरर को और साफ़-सुथरा बनाएंगे
+            error_message = f"Error: {type(e).__name__} - {str(e).split('Call log:')[0].strip()}"
             print(f"Could not solve for quality '{quality}': {error_message}")
             return {quality: error_message}
 
@@ -89,21 +93,23 @@ class Hdhub4uScraper:
         try:
             print(f"Solving labyrinth for URL (Strict Mode): {initial_url}")
 
-            # --- START OF THE NEW STRATEGY (NETWORK BLOCKADE) ---
+            # --- THE NETWORK BLOCKADE STRATEGY ---
             # सिर्फ viralkhabarbull.com को अलाउ करो, बाकी सब ब्लॉक
             await page.route(re.compile(r"^(?!https?:\/\/viralkhabarbull\.com)"), lambda route: route.abort())
-            # --- END OF THE NEW STRATEGY ---
             
+            # Goto के लिए wait_until="domcontentloaded" बेहतर है क्योंकि networkidle कभी-कभी अटक जाता है
             await page.goto(initial_url, wait_until="domcontentloaded", timeout=60000)
             
             await page.wait_for_url("**/homelander/**", timeout=20000)
             print("Redirect successful.")
             
-            # क्योंकि हमने सारे विज्ञापन ब्लॉक कर दिए हैं, पॉप-अप का कोई खतरा नहीं है।
-            # हम सीधे क्लिक कर सकते हैं।
             continue_button = page.locator("#verify_btn:has-text('Click To Continue')")
             await continue_button.wait_for(state="visible", timeout=10000)
-            await continue_button.click()
+            # कई बार क्लिक करने के बाद पेज रिलोड होता है, इसलिए हम इंतज़ार करेंगे
+            await asyncio.gather(
+                page.wait_for_load_state("domcontentloaded", timeout=15000),
+                continue_button.click()
+            )
             print("'Click To Continue' pressed.")
 
             get_links_button = page.locator("a.get-link:has-text('Get Links')")
