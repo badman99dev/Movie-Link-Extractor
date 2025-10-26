@@ -12,8 +12,9 @@ class Hdhub4uScraper:
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
                 context = await browser.new_context()
-                context.set_default_navigation_timeout(90000)
-                context.set_default_timeout(60000)
+                # टाइमआउट को थोड़ा ज़्यादा रखते हैं, यह सुरक्षित है
+                context.set_default_navigation_timeout(90000) # 90 सेकंड
+                context.set_default_timeout(60000) # 60 सेकंड
                 page = await context.new_page()
                 print("Connection successful!")
             except Exception as e:
@@ -24,7 +25,7 @@ class Hdhub4uScraper:
                 # स्टेप 1 & 2: मूवी खोजना और उसके पेज पर जाना
                 search_url = f"https://hdhub4u.pictures/?s={movie_name.replace(' ', '+')}"
                 print(f"Navigating to search page: {search_url}")
-                await page.goto(search_url, wait_until="domcontentloaded")
+                await page.goto(search_url, wait_until="load") # 'load' का उपयोग ज़्यादा सुरक्षित है
 
                 movie_link_element = page.locator("ul.recent-movies li.thumb figcaption a").first
                 try:
@@ -37,11 +38,10 @@ class Hdhub4uScraper:
                     raise Exception("Movie link could not be extracted.")
 
                 print(f"Movie found! Navigating to movie page: {movie_page_url}")
-                await page.goto(movie_page_url, wait_until="domcontentloaded")
+                await page.goto(movie_page_url, wait_until="load")
                 
                 # स्टेप 3: सिर्फ 720p वाले लिंक को ढूंढना
                 print("Searching for the '720p' link...")
-                # locator को और सटीक बनाया गया है
                 link_720p = page.locator("main.page-body h3 > a:has-text('720p')").first
                 
                 try:
@@ -55,7 +55,7 @@ class Hdhub4uScraper:
 
                 print(f"Found target link for '{quality}': {intermediate_url}")
 
-                # स्टेप 4: सिर्फ एक पहेली को सॉल्व करना
+                # स्टेप 4: पहेली को सुलझाना
                 final_link_data = await self.solve_puzzle_like_a_human(context, quality, intermediate_url)
                 
                 return final_link_data
@@ -69,40 +69,49 @@ class Hdhub4uScraper:
         try:
             page = await context.new_page()
             
-            print(f"--- Solving for [{quality}] ---")
+            print(f"--- Solving for [{quality}] with ABSOLUTE FREEDOM ---")
             print(f"Navigating to: {url}")
-            await page.goto(url, wait_until="domcontentloaded")
             
-            print("Waiting for Cloudflare challenge or redirect...")
-            await page.wait_for_url("**/homelander/**", timeout=30000)
-            print("Cloudflare passed! On the puzzle page.")
-
-            # --- "Click to Continue" को इंसान की तरह हैंडल करना ---
+            # कोई ब्लॉकिंग नहीं, कोई रोक-टोक नहीं। ब्राउज़र को अपना काम करने दो।
+            # wait_until="load" यह सुनिश्चित करता है कि Cloudflare की स्क्रिप्ट्स सहित सब कुछ लोड हो।
+            await page.goto(url, wait_until="load", timeout=90000)
+            
+            print("Page navigation initiated. Waiting for all redirects and challenges to complete...")
+            
+            # --- सबसे महत्वपूर्ण बदलाव: URL का इंतज़ार करने के बजाय, सीधे बटन का इंतज़ार करना ---
+            # यह Cloudflare और किसी भी रीडायरेक्ट को अपना काम पूरा करने का समय देता है।
             continue_button = page.locator("#verify_btn:has-text('Click To Continue')")
-            await continue_button.wait_for(state="visible", timeout=15000)
+            print("Now waiting for the 'Click To Continue' button to become visible...")
+            await continue_button.wait_for(state="visible", timeout=45000)
+            print("SUCCESS! Cloudflare challenge passed. 'Click To Continue' button is on screen.")
             
+            # --- अब पॉप-अप को इंसान की तरह हैंडल करेंगे ---
             print("Preparing to click and handle potential pop-up...")
             try:
+                # पॉप-अप के खुलने का इंतज़ार करो
                 async with context.expect_page(timeout=5000) as popup_info:
-                    await continue_button.click()
+                    await continue_button.click() # क्लिक करो
                 
+                # अगर पॉप-अप खुला, तो उसे हैंडल करो
                 popup_page = await popup_info.value
-                await popup_page.wait_for_load_state("domcontentloaded", timeout=20000)
-                print(f"Pop-up appeared: {popup_page.url}. Closing it.")
+                print(f"Pop-up detected: {popup_page.url}. Waiting for it to load...")
+                await popup_page.wait_for_load_state(timeout=20000)
+                print("Pop-up loaded. Closing it now.")
                 await popup_page.close()
             except asyncio.TimeoutError:
-                print("No pop-up on first click. Continuing.")
-                pass
+                # अगर 5 सेकंड में कोई पॉप-अप नहीं खुला, तो इसका मतलब है कि पॉप-अप नहीं था।
+                print("No pop-up on first click. That's a good sign!")
+                pass # आगे बढ़ो
 
-            print("Returned to main page. Waiting for timer...")
+            print("Returned to main page. Waiting for timer to finish...")
 
-            # --- टाइमर और "Get Links" बटन ---
+            # --- टाइमर और फाइनल "Get Links" बटन ---
             get_links_button = page.locator("a.get-link:has-text('Get Links')")
             await get_links_button.wait_for(state="visible", timeout=15000)
             print("'Get Links' button is now visible.")
 
             final_url = await get_links_button.get_attribute("href")
-            print(f"SUCCESS for [{quality}]! Final URL: {final_url}")
+            print(f"!!! VICTORY for [{quality}] !!! Final URL Extracted: {final_url}")
             return {quality: final_url}
 
         except Exception as e:
