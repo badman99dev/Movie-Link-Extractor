@@ -5,7 +5,8 @@ import os
 # तुम्हारी Browserless.io API Key यहाँ डालनी है।
 # Render पर हम इसे Environment Variable में सेट करेंगे।
 BROWSERLESS_API_KEY = os.getenv("BROWSERLESS_API_KEY")
-BROWSERLESS_ENDPOINT = f'wss://chrome.browserless.io?token={BROWSERLESS_API_KEY}'
+# NEW and CORRECT endpoint
+BROWSERLESS_ENDPOINT = f'wss://production-sfo.browserless.io?token={BROWSERLESS_API_KEY}'
 
 class Hdhub4uScraper:
     async def get_movie_links(self, movie_name):
