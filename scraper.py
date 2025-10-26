@@ -1,6 +1,7 @@
 import asyncio
 from playwright.async_api import async_playwright
 import os
+import re
 
 BROWSERLESS_API_KEY = os.getenv("BROWSERLESS_API_KEY")
 BROWSERLESS_ENDPOINT = f'wss://production-sfo.browserless.io?token={BROWSERLESS_API_KEY}'
@@ -50,7 +51,7 @@ class Hdhub4uScraper:
                         intermediate_links[quality] = href
                 
                 if not intermediate_links:
-                    raise Exception("No initial download links (like viralkhabarbull) found on the movie page.")
+                    raise Exception("No initial download links found on the movie page.")
                 
                 print(f"Found intermediate links: {intermediate_links}")
 
@@ -76,36 +77,30 @@ class Hdhub4uScraper:
 
     async def solve_viralkhabarbull_and_get_final_link(self, context, quality, url):
         try:
-            final_url = await self.solve_viralkhabarbull(context, url)
+            final_url = await self.solve_viralkhabarbull_strict(context, url)
             return {quality: final_url}
         except Exception as e:
             error_message = f"Error: {type(e).__name__} - {str(e).splitlines()[0]}"
             print(f"Could not solve for quality '{quality}': {error_message}")
             return {quality: error_message}
 
-    async def solve_viralkhabarbull(self, context, initial_url):
+    async def solve_viralkhabarbull_strict(self, context, initial_url):
         page = await context.new_page()
-        
-        # --- START OF THE NEW STRATEGY ---
-        # हम पॉप-अप को हैंडल करने के लिए एक इवेंट लिसनर बनाएंगे।
-        async def handle_popup(popup):
-            # हम मुख्य पेज को बंद नहीं करना चाहते, इसलिए हम इंतज़ार करेंगे
-            # यह सुनिश्चित करने के लिए कि यह पॉप-अप है।
-            await asyncio.sleep(1) # 1 सेकंड रुको
-            if popup != page: # अगर यह हमारा मुख्य पेज नहीं है...
-                print(f"Pop-up detected and closed: {popup.url}")
-                await popup.close()
-
-        context.on("page", handle_popup)
-        # --- END OF THE NEW STRATEGY ---
-
         try:
-            print(f"Solving labyrinth for URL: {initial_url}")
+            print(f"Solving labyrinth for URL (Strict Mode): {initial_url}")
+
+            # --- START OF THE NEW STRATEGY (NETWORK BLOCKADE) ---
+            # सिर्फ viralkhabarbull.com को अलाउ करो, बाकी सब ब्लॉक
+            await page.route(re.compile(r"^(?!https?:\/\/viralkhabarbull\.com)"), lambda route: route.abort())
+            # --- END OF THE NEW STRATEGY ---
+            
             await page.goto(initial_url, wait_until="domcontentloaded", timeout=60000)
             
             await page.wait_for_url("**/homelander/**", timeout=20000)
             print("Redirect successful.")
-
+            
+            # क्योंकि हमने सारे विज्ञापन ब्लॉक कर दिए हैं, पॉप-अप का कोई खतरा नहीं है।
+            # हम सीधे क्लिक कर सकते हैं।
             continue_button = page.locator("#verify_btn:has-text('Click To Continue')")
             await continue_button.wait_for(state="visible", timeout=10000)
             await continue_button.click()
@@ -120,5 +115,4 @@ class Hdhub4uScraper:
             
             return final_url
         finally:
-            context.remove_listener("page", handle_popup) # इवेंट लिसनर को हटाना ज़रूरी है
             await page.close()
