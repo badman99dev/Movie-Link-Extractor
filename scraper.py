@@ -1,7 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
 import os
-import re
 
 BROWSERLESS_API_KEY = os.getenv("BROWSERLESS_API_KEY")
 BROWSERLESS_ENDPOINT = f'wss://production-sfo.browserless.io?token={BROWSERLESS_API_KEY}'
@@ -13,9 +12,8 @@ class Hdhub4uScraper:
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
                 context = await browser.new_context()
-                # context के लिए एक डिफ़ॉल्ट टाइमआउट सेट कर देते हैं
-                context.set_default_navigation_timeout(60000) # 60 सेकंड
-                context.set_default_timeout(60000) # 60 सेकंड
+                context.set_default_navigation_timeout(90000) # 90 second timeout for navigation
+                context.set_default_timeout(90000) # 90 second timeout for actions
                 page = await context.new_page()
                 print("Connection successful!")
             except Exception as e:
@@ -23,10 +21,12 @@ class Hdhub4uScraper:
                 raise
 
             try:
+                # Phase 1: Search for the movie
                 search_url = f"https://hdhub4u.pictures/?s={movie_name.replace(' ', '+')}"
                 print(f"Navigating to search page: {search_url}")
                 await page.goto(search_url, wait_until="domcontentloaded")
 
+                # Phase 2: Find the correct movie link
                 movie_link_element = page.locator("ul.recent-movies li.thumb figcaption a").first
                 try:
                     await movie_link_element.wait_for(state="visible", timeout=10000)
@@ -40,6 +40,7 @@ class Hdhub4uScraper:
                 print(f"Movie found! Navigating to movie page: {movie_page_url}")
                 await page.goto(movie_page_url, wait_until="domcontentloaded")
                 
+                # Phase 3: Extract intermediate links
                 print("Extracting intermediate links...")
                 link_locators = page.locator("main.page-body h3 > a")
                 count = await link_locators.count()
@@ -54,23 +55,20 @@ class Hdhub4uScraper:
                         intermediate_links[quality] = href
                 
                 if not intermediate_links:
-                    raise Exception("No initial download links found on the movie page.")
+                    raise Exception("No initial download links (like viralkhabarbull) found on the movie page.")
                 
                 print(f"Found intermediate links: {intermediate_links}")
 
+                # Phase 4: Solve the puzzle for each link, one by one
                 final_links = {}
-                tasks = []
                 for quality, url in intermediate_links.items():
                     if "viralkhabarbull.com" in url:
-                        tasks.append(self.solve_viralkhabarbull_and_get_final_link(context, quality, url))
-                    else:
-                        final_links[quality] = url
-
-                if tasks:
-                    results = await asyncio.gather(*tasks)
-                    for result in results:
+                        result = await self.solve_puzzle_like_a_human(context, quality, url)
                         if result:
                             final_links.update(result)
+                    else:
+                        # If it's already a final link, just add it
+                        final_links[quality] = url
 
                 return final_links
 
@@ -78,47 +76,48 @@ class Hdhub4uScraper:
                 print("Closing browser connection.")
                 await browser.close()
 
-    async def solve_viralkhabarbull_and_get_final_link(self, context, quality, url):
+    async def solve_puzzle_like_a_human(self, context, quality, url):
+        page = None
         try:
-            final_url = await self.solve_viralkhabarbull_strict(context, url)
-            return {quality: final_url}
-        except Exception as e:
-            # हम एरर को और साफ़-सुथरा बनाएंगे
-            error_message = f"Error: {type(e).__name__} - {str(e).split('Call log:')[0].strip()}"
-            print(f"Could not solve for quality '{quality}': {error_message}")
-            return {quality: error_message}
+            # Create a new page for each puzzle to keep things clean
+            page = await context.new_page()
+            
+            print(f"--- Solving for [{quality}] ---")
+            print(f"Navigating to: {url}")
+            await page.goto(url, wait_until="domcontentloaded")
+            
+            # Wait for the redirect to the main puzzle page
+            await page.wait_for_url("**/homelander/**", timeout=30000)
+            print("Redirect successful. On the puzzle page.")
 
-    async def solve_viralkhabarbull_strict(self, context, initial_url):
-        page = await context.new_page()
-        try:
-            print(f"Solving labyrinth for URL (Strict Mode): {initial_url}")
-
-            # --- THE NETWORK BLOCKADE STRATEGY ---
-            # सिर्फ viralkhabarbull.com को अलाउ करो, बाकी सब ब्लॉक
-            await page.route(re.compile(r"^(?!https?:\/\/viralkhabarbull\.com)"), lambda route: route.abort())
-            
-            # Goto के लिए wait_until="domcontentloaded" बेहतर है क्योंकि networkidle कभी-कभी अटक जाता है
-            await page.goto(initial_url, wait_until="domcontentloaded", timeout=60000)
-            
-            await page.wait_for_url("**/homelander/**", timeout=20000)
-            print("Redirect successful.")
-            
+            # --- Handle "Click to Continue" button and its pop-up ---
             continue_button = page.locator("#verify_btn:has-text('Click To Continue')")
             await continue_button.wait_for(state="visible", timeout=10000)
-            # कई बार क्लिक करने के बाद पेज रिलोड होता है, इसलिए हम इंतज़ार करेंगे
-            await asyncio.gather(
-                page.wait_for_load_state("domcontentloaded", timeout=15000),
-                continue_button.click()
-            )
-            print("'Click To Continue' pressed.")
+            
+            print("Waiting for pop-up after first click...")
+            async with context.expect_page() as popup_info:
+                await continue_button.click()
+            
+            popup_page = await popup_info.value
+            await popup_page.wait_for_load_state("domcontentloaded", timeout=20000)
+            print(f"Pop-up appeared: {popup_page.url}. Closing it.")
+            await popup_page.close()
+            print("Returned to main page.")
 
+            # --- Wait for timer and "Get Links" button ---
             get_links_button = page.locator("a.get-link:has-text('Get Links')")
+            print("Waiting for the timer and 'Get Links' button...")
             await get_links_button.wait_for(state="visible", timeout=15000)
-            print("'Get Links' button has appeared.")
+            print("'Get Links' button is visible.")
 
             final_url = await get_links_button.get_attribute("href")
-            print(f"Final URL Extracted: {final_url}")
-            
-            return final_url
+            print(f"SUCCESS for [{quality}]! Final URL: {final_url}")
+            return {quality: final_url}
+
+        except Exception as e:
+            error_message = f"Error for [{quality}]: {type(e).__name__} - {str(e).split('Call log:')[0].strip()}"
+            print(error_message)
+            return {quality: error_message}
         finally:
-            await page.close()
+            if page:
+                await page.close()
