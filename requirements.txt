@@ -1,4 +1,3 @@
 quart
 playwright
-gunicorn
 hypercorn # Quart ke liye Gunicorn jaisa server
