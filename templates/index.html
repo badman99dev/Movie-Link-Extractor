@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Remote Scraper Interface 🚀</title>
+    <title>Efficient Live Mirror (with DOM Patching) ✨</title>
+    
+    <!-- We are importing the morphdom library from a CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/morphdom@2.7.0/dist/morphdom-umd.min.js"></script>
+    
     <style>
         :root {
             --bg-dark: #1a1c20;
@@ -22,7 +26,7 @@
             background-color: var(--bg-dark);
             color: var(--text-light);
             margin: 0;
-            overflow: hidden; /* Prevent body scroll */
+            overflow: hidden;
         }
         .main-container {
             display: flex;
@@ -42,80 +46,44 @@
         .browser-mirror {
             flex-grow: 1;
             background-color: #fff;
-            position: relative;
         }
         #live-iframe {
             width: 100%;
             height: 100%;
             border: none;
         }
-        h2, h4 {
+        h2 {
             margin-top: 0;
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 10px;
-            color: var(--text-light);
-        }
-        .button-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            color: white;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            transition: background-color 0.2s;
         }
         #start-mission-btn {
             background-color: var(--accent-green);
-            border-color: rgba(240, 246, 252, 0.1);
+            border: 1px solid rgba(240, 246, 252, 0.1);
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            color: white;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+            margin-bottom: 20px;
         }
         #start-mission-btn:hover { background-color: #4ac260; }
-        .utility-btn { background-color: #373e47; }
-        .utility-btn:hover { background-color: #444c56; }
-        button:disabled { background-color: #2e343b; cursor: not-allowed; opacity: 0.6; }
+        #start-mission-btn:disabled { background-color: #2e343b; cursor: not-allowed; opacity: 0.6; }
 
-        .tabs { display: flex; }
-        .tab-button {
-            padding: 10px 15px;
-            cursor: pointer;
-            background-color: transparent;
-            border: none;
-            border-bottom: 2px solid transparent;
-            color: var(--text-muted);
-            font-size: 14px;
-        }
-        .tab-button.active {
-            color: var(--text-light);
-            border-bottom: 2px solid var(--accent-orange);
-        }
-        .tab-content {
-            display: none;
+        #log-container {
             flex-grow: 1;
-            overflow: hidden; /* Let the inner div scroll */
             background-color: var(--bg-terminal);
             border: 1px solid var(--border-color);
-            border-top: none;
-            border-radius: 0 0 6px 6px;
-        }
-        .tab-content.active { display: flex; flex-direction: column; }
-        #log-container, #network-log-display, #intelligence-report {
+            border-radius: 6px;
             padding: 15px;
             font-family: 'SF Mono', 'Consolas', 'Liberation Mono', Menlo, Courier, monospace;
             font-size: 13px;
             white-space: pre-wrap;
             overflow-y: auto;
-            flex-grow: 1;
         }
-        #intelligence-report img { max-width: 100%; border: 1px solid var(--border-color); margin-top: 10px; }
-        #intelligence-report textarea { width: calc(100% - 20px); height: 200px; background-color: var(--bg-dark); color: var(--text-muted); border: 1px solid var(--border-color); padding: 10px; margin-top: 10px; font-size: 12px; }
-
         /* Log Colors */
         .log-info { color: var(--accent-blue); }
         .log-success { color: var(--accent-green); }
@@ -123,45 +91,18 @@
         .log-warning { color: var(--accent-orange); }
         .log-link a { color: var(--accent-green); text-decoration: none; font-weight: bold; }
         .log-link a:hover { text-decoration: underline; }
-
-        /* Arrow & Highlight */
-        #click-arrow {
-            position: absolute; width: 40px; height: 40px; z-index: 99999;
-            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23f85149" width="40px" height="40px"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.59L7.41 13 6 14.41l5 5 8-8L17.59 10 11 16.59z" transform="rotate(180 12 12)"/></svg>');
-            display: none; pointer-events: none; animation: bounce 1s infinite;
-        }
-        @keyframes bounce { 0%,100% {transform: translateY(0);} 50% {transform: translateY(-15px);} }
     </style>
 </head>
 <body>
     <div class="main-container">
         <div class="control-panel">
-            <h2>🚀 Scraper Control</h2>
-            <button id="start-mission-btn">▶️ Start Mission</button>
-            <div class="button-group">
-                <button id="download-html-btn" class="utility-btn" disabled>📄 Download HTML</button>
-                <button id="download-network-btn" class="utility-btn" disabled>📈 Download Network</button>
-            </div>
-            
-            <div class="tabs">
-                <button class="tab-button active" onclick="openTab(event, 'logs')">Logs</button>
-                <button class="tab-button" onclick="openTab(event, 'network')">Network</button>
-                <button class="tab-button" onclick="openTab(event, 'intel')">Intelligence</button>
-            </div>
-
-            <div id="logs" class="tab-content active">
-                <div id="log-container">Awaiting mission start...</div>
-            </div>
-            <div id="network" class="tab-content">
-                <pre id="network-log-display">Network monitor is idle.</pre>
-            </div>
-            <div id="intel" class="tab-content">
-                <div id="intelligence-report">Awaiting intelligence data...</div>
-            </div>
+            <h2>🚀 Efficient Control Panel</h2>
+            <button id="start-mission-btn">▶️ Start Live Sync</button>
+            <h4>Live Mission Logs:</h4>
+            <div id="log-container">Awaiting instructions...</div>
         </div>
         <div class="browser-mirror">
-            <iframe id="live-iframe" sandbox="allow-same-origin allow-scripts"></iframe>
-            <div id="click-arrow"></div>
+            <iframe id="live-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
         </div>
     </div>
 
@@ -170,35 +111,8 @@
         const startBtn = document.getElementById('start-mission-btn');
         const logContainer = document.getElementById('log-container');
         const liveIframe = document.getElementById('live-iframe');
-        const downloadHtmlBtn = document.getElementById('download-html-btn');
-        const downloadNetworkBtn = document.getElementById('download-network-btn');
-        const networkLogDisplay = document.getElementById('network-log-display');
-        const intelReport = document.getElementById('intelligence-report');
-        const clickArrow = document.getElementById('click-arrow');
-        
-        // --- State Variables ---
-        let lastHtmlContent = '';
-        let networkLogData = null;
-        let lastHighlightedElement = null;
 
         // --- UI Functions ---
-        function openTab(evt, tabName) {
-            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none");
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(tabName).style.display = "flex";
-            evt.currentTarget.classList.add('active');
-        }
-        document.querySelector('.tab-button').click(); // Initialize first tab
-
-        function downloadFile(content, fileName, contentType) {
-            const a = document.createElement("a");
-            const file = new Blob([content], { type: contentType });
-            a.href = URL.createObjectURL(file);
-            a.download = fileName;
-            a.click();
-            URL.revokeObjectURL(a.href);
-        }
-
         function addLog(message, type = '') {
             const logEntry = document.createElement('div');
             if (type) logEntry.classList.add(type);
@@ -207,82 +121,44 @@
             logContainer.scrollTop = logContainer.scrollHeight;
         }
 
-        function visualizeClick(selector) {
-            const iframeDoc = liveIframe.contentWindow.document;
-            if (!iframeDoc) return;
-            const targetElement = iframeDoc.querySelector(selector);
-            if (targetElement) {
-                targetElement.style.outline = '3px solid red';
-                targetElement.style.boxShadow = '0 0 20px yellow';
-                lastHighlightedElement = targetElement;
-                
-                const rect = targetElement.getBoundingClientRect();
-                const iframeRect = liveIframe.getBoundingClientRect();
-                clickArrow.style.left = `${iframeRect.left + rect.left + (rect.width / 2) - 20}px`;
-                clickArrow.style.top = `${iframeRect.top + rect.top - 40}px`;
-                clickArrow.style.display = 'block';
-            }
-        }
-
-        // --- Event Listeners ---
-        downloadHtmlBtn.addEventListener('click', () => lastHtmlContent && downloadFile(lastHtmlContent, 'snapshot.html', 'text/html'));
-        downloadNetworkBtn.addEventListener('click', () => networkLogData && downloadFile(JSON.stringify(networkLogData, null, 2), 'network_log.json', 'application/json'));
-
+        // --- Main Logic ---
         startBtn.addEventListener('click', function() {
-            // --- Reset UI ---
             logContainer.innerHTML = '';
-            networkLogDisplay.textContent = 'Network monitor is idle.';
-            intelReport.innerHTML = 'Awaiting intelligence data...';
             startBtn.disabled = true;
-            downloadHtmlBtn.disabled = true;
-            downloadNetworkBtn.disabled = true;
-            startBtn.textContent = 'Mission in Progress...';
+            startBtn.textContent = 'Sync in Progress...';
+            
+            // Initialize the iframe with a blank but valid HTML structure
+            const iframeDoc = liveIframe.contentWindow.document;
+            iframeDoc.open();
+            iframeDoc.write('<html><head><base href="https://www.google.com/"></head><body><div style="font-family: sans-serif; padding: 20px;">Waiting for first sync...</div></body></html>');
+            iframeDoc.close();
             
             const eventSource = new EventSource('/build');
             
             eventSource.onmessage = function(event) {
                 const message = event.data;
 
-                // --- Message Parsing ---
                 if (message.startsWith('--HTML-SNAPSHOT--')) {
-                    lastHtmlContent = message.substring(17);
-                    if (lastHighlightedElement) { // Clean previous highlight
-                        lastHighlightedElement.style.outline = '';
-                        lastHighlightedElement.style.boxShadow = '';
-                        lastHighlightedElement = null;
-                    }
-                    clickArrow.style.display = 'none';
-
-                    const iframeDoc = liveIframe.contentWindow.document;
-                    iframeDoc.open();
-                    iframeDoc.write(`<base href="https://vegamovies.you/">` + lastHtmlContent);
-                    iframeDoc.close();
-                    downloadHtmlBtn.disabled = false;
-
-                } else if (message.startsWith('--CLICK-ON--')) {
-                    const selector = message.substring(12);
-                    addLog(`Visualizing click on: ${selector}`, 'log-info');
-                    visualizeClick(selector);
-
-                } else if (message.startsWith('--SCREENSHOT--')) {
-                    const base64Img = message.substring(14);
-                    intelReport.innerHTML += `<h4>📸 Screenshot:</h4><img src="${base64Img}" alt="Screenshot">`;
-
+                    const newHtmlString = message.substring(17);
+                    
+                    // #################################################
+                    // ##### THE MORPHDOM MAGIC! #####
+                    // #################################################
+                    
+                    const currentDOM = iframeDoc.documentElement; // Get the whole <html> element
+                    
+                    // Use morphdom to efficiently update the iframe's entire DOM
+                    // This is better than just the body as it also updates the head (e.g., title)
+                    morphdom(currentDOM, newHtmlString);
+                    
                 } else if (message.startsWith('--LINK--')) {
-                    const link = message.substring(8);
-                    addLog(`🔗 <strong>LINK FOUND:</strong> <a href="${link}" target="_blank">${link}</a>`, 'log-link');
-
-                } else if (message.startsWith('--NETWORK-LOG--')) {
-                    const jsonData = message.substring(15);
-                    networkLogData = JSON.parse(jsonData);
-                    networkLogDisplay.textContent = JSON.stringify(networkLogData, null, 2);
-                    downloadNetworkBtn.disabled = false;
+                    addLog(`🔗 <strong>LINK:</strong> <a href="${message.substring(8)}" target="_blank">Final URL</a>`, 'log-link');
 
                 } else if (message.includes('--- MISSION COMPLETE ---')) {
                     addLog(message, 'log-success');
                     eventSource.close();
                     startBtn.disabled = false;
-                    startBtn.textContent = '▶️ Start New Mission';
+                    startBtn.textContent = '▶️ Start New Sync';
                 
                 } else {
                     let type = '';
