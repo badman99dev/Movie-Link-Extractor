@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Control: Vegamovies Link Extractor 🚀</title>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; background-color: #121212; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+        .container { background-color: #1e1e1e; padding: 30px; border-radius: 10px; border: 1px solid #333; box-shadow: 0 0 25px rgba(0,0,0,0.7); width: 100%; max-width: 800px; }
+        h1 { color: #00ff9d; text-align: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-top: 0; }
+        button { background-color: #ff4500; color: #fff; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; width: 100%; transition: all 0.3s; }
+        button:hover { background-color: #ff6347; box-shadow: 0 0 15px #ff4500; }
+        button:disabled { background-color: #555; cursor: not-allowed; box-shadow: none; }
+        #log-container { margin-top: 20px; background-color: #000; border: 1px solid #333; border-radius: 5px; padding: 15px; height: 400px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.6; }
+        .log-entry.link { color: #00ff9d; font-weight: bold; }
+        .log-entry.error { color: #ff4757; font-weight: bold; }
+        .log-entry.success { color: #2ed573; }
+        .log-entry.info { color: #70a1ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Mission Control</h1>
+        <p>Click the button below to start the mission and extract the link for "Thamma (2025)".</p>
+        <button id="start-mission-btn">▶️ START MISSION</button>
+        
+        <h4>Live Mission Logs:</h4>
+        <div id="log-container">Awaiting mission start...</div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('start-mission-btn');
+        const logContainer = document.getElementById('log-container');
+
+        startBtn.addEventListener('click', function() {
+            let eventSource;
+
+            logContainer.innerHTML = '';
+            startBtn.disabled = true;
+            startBtn.textContent = 'MISSION IN PROGRESS...';
+
+            function addLog(message, type = '') {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${type}`;
+                logEntry.textContent = message;
+                logContainer.appendChild(logEntry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+
+            eventSource = new EventSource('/build');
+            
+            eventSource.onmessage = function(event) {
+                const message = event.data;
+                console.log("Received data:", message);
+
+                if (message.startsWith('--LINK--')) {
+                    const link = message.substring(8);
+                    addLog('--- LINK FOUND ---', 'link');
+                    
+                    const linkEntry = document.createElement('div');
+                    linkEntry.className = 'log-entry link';
+                    const linkAnchor = document.createElement('a');
+                    linkAnchor.href = link;
+                    linkAnchor.target = '_blank';
+                    linkAnchor.textContent = link;
+                    linkEntry.appendChild(linkAnchor);
+                    logContainer.appendChild(linkEntry);
+                    logContainer.scrollTop = logContainer.scrollHeight;
+                    
+                } else if (message.includes('❌')) {
+                    addLog(message, 'error');
+                } else if (message.includes('✅') || message.includes('✨')) {
+                    addLog(message, 'success');
+                } else if (message.includes('▶️') || message.includes('⏳')) {
+                    addLog(message, 'info');
+                } else if (message.includes('--- MISSION COMPLETE ---')) {
+                    addLog(message, 'info');
+                    eventSource.close();
+                    startBtn.disabled = false;
+                    startBtn.textContent = '▶️ START NEW MISSION';
+                } else {
+                    addLog(message);
+                }
+            };
+            
+            eventSource.onerror = function() {
+                addLog('❌ CRITICAL: Connection to server lost. Mission aborted.', 'error');
+                eventSource.close();
+                startBtn.disabled = false;
+                startBtn.textContent = '▶️ TRY AGAIN';
+            };
+        });
+    </script>
+</body>
+</html>
