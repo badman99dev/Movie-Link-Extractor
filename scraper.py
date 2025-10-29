@@ -9,9 +9,9 @@ if not BROWSERLESS_API_KEY:
     
 BROWSERLESS_ENDPOINT = f'wss://production-sfo.browserless.io?token={BROWSERLESS_API_KEY}'
 
-class VegamoviesScraper:
+class LiveInspector:
     
-    async def stream_movie_link_extraction(self, movie_url: str):
+    async def run_test_mission(self):
         start_time = time.time()
         
         def log_message(message):
@@ -20,25 +20,15 @@ class VegamoviesScraper:
         
         async def yield_html_snapshot(page, description):
             yield log_message(f"🔄 Syncing HTML: {description}")
-            try:
-                html_content = await page.content()
-                yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
-            except Exception as e:
-                yield log_message(f"⚠️ Could not sync HTML: {e}")
+            html_content = await page.content()
+            yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
 
         async with async_playwright() as p:
-            yield log_message("▶️ Initiating 'JS Injection' Protocol (Corrected)...")
+            yield log_message("▶️ Initiating 'Project Live Inspector'...")
             browser, context, page = None, None, None
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
                 context = await browser.new_context(viewport={'width': 1280, 'height': 800})
-                
-                def handle_popup(new_page):
-                    if new_page.url != "about:blank":
-                        print(f"POP-UP BLOCKER: Closing {new_page.url}")
-                        asyncio.create_task(new_page.close())
-                context.on("page", handle_popup)
-                
                 page = await context.new_page()
                 yield log_message("✅ Connection successful!")
             except Exception as e:
@@ -46,52 +36,54 @@ class VegamoviesScraper:
                 raise
 
             try:
-                yield log_message(f"🌐 Navigating to main page...")
-                await page.goto(movie_url, wait_until="domcontentloaded")
-                yield log_message(f"✅ Page loaded. Title: '{await page.title()}'")
-                async for log in yield_html_snapshot(page, "After page load"): yield log
+                # --- Step 1: Go to Google ---
+                yield log_message("🌐 Navigating to www.google.com...")
+                await page.goto("https://www.google.com", wait_until="load")
+                yield log_message("✅ Google page loaded.")
+                async for log in yield_html_snapshot(page, "On Google homepage"): yield log
+                await asyncio.sleep(3)
 
-                yield log_message("🕵️‍♂️ Searching for the player iframe...")
-                iframe_selector = "#IndStreamPlayer iframe"
-                
-                # We get the locator first
-                iframe_locator = page.locator(iframe_selector)
+                # --- Step 2: Search for Wikipedia ---
+                search_box_selector = 'textarea[name="q"]'
+                yield log_message(f"🎯 Typing 'Wikipedia' into search box: {search_box_selector}")
+                await page.locator(search_box_selector).fill("Wikipedia")
+                async for log in yield_html_snapshot(page, "After typing 'Wikipedia'"): yield log
+                await asyncio.sleep(3)
 
-                await iframe_locator.wait_for(state="visible", timeout=45000)
-                yield log_message("👍 Found the iframe!")
-                async for log in yield_html_snapshot(page, "After finding iframe"): yield log
+                yield log_message("⌨️ Pressing Enter to search...")
+                await page.press(search_box_selector, 'Enter')
+                yield log_message("✅ Search executed. Waiting for results page...")
+                await page.wait_for_load_state("load")
+                async for log in yield_html_snapshot(page, "On Google search results"): yield log
+                await asyncio.sleep(3)
 
-                yield log_message("💉 Preparing to inject JavaScript for a forced click...")
-                
-                # #################################################
-                # ##### THE CORRECTED CODE! #####
-                # #################################################
-                # We get the actual Frame object from the locator using .first
-                frame = await iframe_locator.first.content_frame()
-                if not frame:
-                    raise Exception("Could not get the content frame of the iframe.")
-                
-                # Now we inject JavaScript into the correct frame object
-                await frame.evaluate("() => { document.body.click(); }")
-                yield log_message("💥 JS INJECTED! Forced click command sent to the iframe's body.")
-                
-                yield log_message("⏳ Waiting 10 seconds for the video to initialize post-injection...")
-                await asyncio.sleep(10)
-                async for log in yield_html_snapshot(page, "After JS injection click"): yield log
+                # --- Step 3: Click the Wikipedia link ---
+                wiki_link_selector = 'a[href*="wikipedia.org"]'
+                yield log_message(f"🎯 Clicking the first Wikipedia link: {wiki_link_selector}")
+                # We use .first to ensure we click the main link
+                await page.locator(wiki_link_selector).first.click()
+                yield log_message("✅ Clicked! Waiting for Wikipedia page to load...")
+                await page.wait_for_load_state("load")
+                yield log_message("✅ Wikipedia homepage loaded.")
+                async for log in yield_html_snapshot(page, "On Wikipedia homepage"): yield log
+                await asyncio.sleep(3)
 
-                yield log_message("🎬 Searching for <video> tag INSIDE iframe...")
-                # We use the frame_locator again for consistency
-                video_tag = page.frame_locator(iframe_selector).locator("video")
+                # --- Step 4: Search for Amitabh Bachchan on Wikipedia ---
+                wiki_search_selector = 'input[name="search"]'
+                yield log_message(f"🎯 Typing 'Amitabh Bachchan' into Wikipedia search box...")
+                await page.locator(wiki_search_selector).fill("Amitabh Bachchan")
+                async for log in yield_html_snapshot(page, "After typing 'Amitabh Bachchan'"): yield log
+                await asyncio.sleep(3)
                 
-                await video_tag.wait_for(state="attached", timeout=45000)
-                yield log_message("👍 Found the <video> tag!")
-
-                direct_link = await video_tag.get_attribute("src")
-                if not direct_link:
-                    raise Exception("Video tag found, but no 'src' attribute.")
+                yield log_message("⌨️ Clicking the search button...")
+                await page.locator('button:has-text("Search")').click()
+                yield log_message("✅ Search executed. Waiting for the final page...")
+                await page.wait_for_load_state("load")
+                yield log_message("✅ Final page loaded!")
+                async for log in yield_html_snapshot(page, "On Amitabh Bachchan's page"): yield log
                 
-                yield log_message(f"✨ MISSION ACCOMPLISHED! Link Found!")
-                yield f"--LINK--{direct_link}"
+                yield log_message(f"✨ MISSION ACCOMPLISHED! Test completed successfully.")
+                yield f"--LINK--{page.url}" # Return the final URL as the "link"
 
             except Exception as e:
                 error_message = str(e).split('Call log:')[0].strip()
