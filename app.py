@@ -1,7 +1,6 @@
 from quart import Quart, Response, render_template, stream_with_context
 import asyncio
-# scraper.py se ab LiveInspector class import karenge
-from scraper import LiveInspector 
+from scraper import LiveInspector # The class name is still LiveInspector
 import os
 
 app = Quart(__name__)
@@ -14,27 +13,21 @@ async def home():
 async def health_check():
     return "OK, I am alive! 🦾"
 
-# `/build` endpoint ab naya test mission chalayega
 @app.route('/build')
 async def build_and_run_test():
     
     @stream_with_context
     async def generate_logs():
-        # LiveInspector ka object banaya
         inspector = LiveInspector()
         try:
-            # `run_test_mission` function ko call kiya
+            # We call the same function name as before
             async for log_entry in inspector.run_test_mission():
-                # HTML aur LINK messages ko waise hi handle kiya
                 if log_entry.startswith(("--HTML-SNAPSHOT--", "--LINK--")):
                     yield f"data: {log_entry}\n\n"
                 else:
                     yield f"data: {log_entry}\n\n"
         except Exception as e:
             yield f"data: ❌ Final error in app: {e}\n\n"
-        
-        # --- MISSION COMPLETE --- ko alag se handle karne ki zaroorat nahi,
-        # woh scraper se aa jaayega.
 
     return Response(generate_logs(), mimetype='text/event-stream')
 
