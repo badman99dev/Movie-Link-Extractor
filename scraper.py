@@ -19,7 +19,6 @@ class VegamoviesScraper:
             return f"{elapsed_time} {message}"
         
         async def yield_html_snapshot(page, description):
-            """Helper to send live HTML snapshots."""
             yield log_message(f"🔄 Syncing HTML: {description}")
             try:
                 html_content = await page.content()
@@ -28,13 +27,12 @@ class VegamoviesScraper:
                 yield log_message(f"⚠️ Could not sync HTML: {e}")
 
         async with async_playwright() as p:
-            yield log_message("▶️ Initiating 'JS Injection' Protocol...")
+            yield log_message("▶️ Initiating 'JS Injection' Protocol (Corrected)...")
             browser, context, page = None, None, None
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
                 context = await browser.new_context(viewport={'width': 1280, 'height': 800})
                 
-                # We keep the pop-up blocker, it doesn't hurt.
                 def handle_popup(new_page):
                     if new_page.url != "about:blank":
                         print(f"POP-UP BLOCKER: Closing {new_page.url}")
@@ -55,23 +53,25 @@ class VegamoviesScraper:
 
                 yield log_message("🕵️‍♂️ Searching for the player iframe...")
                 iframe_selector = "#IndStreamPlayer iframe"
-                iframe_element = page.locator(iframe_selector).first # Use .first to get the element handle
+                
+                # We get the locator first
+                iframe_locator = page.locator(iframe_selector)
 
-                await iframe_element.wait_for(state="visible", timeout=45000)
+                await iframe_locator.wait_for(state="visible", timeout=45000)
                 yield log_message("👍 Found the iframe!")
                 async for log in yield_html_snapshot(page, "After finding iframe"): yield log
 
-                # #################################################
-                # ##### JAVASCRIPT INJECTION ATTACK! #####
-                # #################################################
                 yield log_message("💉 Preparing to inject JavaScript for a forced click...")
                 
-                # Get the handle to the iframe's content
-                frame = await iframe_element.content_frame()
+                # #################################################
+                # ##### THE CORRECTED CODE! #####
+                # #################################################
+                # We get the actual Frame object from the locator using .first
+                frame = await iframe_locator.first.content_frame()
                 if not frame:
                     raise Exception("Could not get the content frame of the iframe.")
                 
-                # Inject and execute JavaScript inside the iframe
+                # Now we inject JavaScript into the correct frame object
                 await frame.evaluate("() => { document.body.click(); }")
                 yield log_message("💥 JS INJECTED! Forced click command sent to the iframe's body.")
                 
@@ -80,7 +80,7 @@ class VegamoviesScraper:
                 async for log in yield_html_snapshot(page, "After JS injection click"): yield log
 
                 yield log_message("🎬 Searching for <video> tag INSIDE iframe...")
-                # We still use the frame_locator to find the video tag
+                # We use the frame_locator again for consistency
                 video_tag = page.frame_locator(iframe_selector).locator("video")
                 
                 await video_tag.wait_for(state="attached", timeout=45000)
