@@ -1,11 +1,10 @@
 from quart import Quart, Response, render_template, stream_with_context
 import asyncio
-from scraper import VegamoviesScraper
+# scraper.py se ab LiveInspector class import karenge
+from scraper import LiveInspector 
 import os
 
-app = Quart(__name__) # Flask ki jagah Quart
-
-TEST_URL = "https://vegamovies.you/45078-thamma-2025-hindi-audio-hdtc-720p-480p-1080p.html"
+app = Quart(__name__)
 
 @app.route('/')
 async def home():
@@ -15,27 +14,30 @@ async def home():
 async def health_check():
     return "OK, I am alive! 🦾"
 
+# `/build` endpoint ab naya test mission chalayega
 @app.route('/build')
-async def build_and_get_link():
+async def build_and_run_test():
     
     @stream_with_context
     async def generate_logs():
-        scraper = VegamoviesScraper()
+        # LiveInspector ka object banaya
+        inspector = LiveInspector()
         try:
-            # Ab hum aasaani se async for loop chala sakte hain
-            async for log_entry in scraper.stream_movie_link_extraction(TEST_URL):
-                if log_entry.startswith("--LINK--"):
+            # `run_test_mission` function ko call kiya
+            async for log_entry in inspector.run_test_mission():
+                # HTML aur LINK messages ko waise hi handle kiya
+                if log_entry.startswith(("--HTML-SNAPSHOT--", "--LINK--")):
                     yield f"data: {log_entry}\n\n"
                 else:
                     yield f"data: {log_entry}\n\n"
         except Exception as e:
             yield f"data: ❌ Final error in app: {e}\n\n"
         
-        yield "data: --- MISSION COMPLETE ---\n\n"
+        # --- MISSION COMPLETE --- ko alag se handle karne ki zaroorat nahi,
+        # woh scraper se aa jaayega.
 
     return Response(generate_logs(), mimetype='text/event-stream')
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5001))
-    # Quart's own way to run
     app.run(debug=True, host='0.0.0.0', port=port)
