@@ -3,78 +3,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mission Control: Vegamovies Link Extractor 🚀</title>
+    <title>Mission Control 2.0 🚀</title>
     <style>
-        body { font-family: 'Courier New', Courier, monospace; background-color: #121212; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-        .container { background-color: #1e1e1e; padding: 30px; border-radius: 10px; border: 1px solid #333; box-shadow: 0 0 25px rgba(0,0,0,0.7); width: 100%; max-width: 800px; }
-        h1 { color: #00ff9d; text-align: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-top: 0; }
+        body { font-family: 'Courier New', Courier, monospace; background-color: #121212; color: #e0e0e0; font-size: 16px; line-height: 1.6; }
+        .container { background-color: #1e1e1e; padding: 30px; border-radius: 10px; border: 1px solid #333; box-shadow: 0 0 25px rgba(0,0,0,0.7); width: 95%; max-width: 1000px; margin: 20px auto; }
+        h1, h4 { color: #00ff9d; text-align: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-top: 0; }
         button { background-color: #ff4500; color: #fff; padding: 15px 30px; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; width: 100%; transition: all 0.3s; }
-        button:hover { background-color: #ff6347; box-shadow: 0 0 15px #ff4500; }
-        button:disabled { background-color: #555; cursor: not-allowed; box-shadow: none; }
-        #log-container { margin-top: 20px; background-color: #000; border: 1px solid #333; border-radius: 5px; padding: 15px; height: 400px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; font-size: 14px; line-height: 1.6; }
-        .log-entry.link { color: #00ff9d; font-weight: bold; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+        #log-container { margin-top: 20px; background-color: #000; border: 1px solid #333; border-radius: 5px; padding: 15px; height: 500px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; }
+        .log-entry.link a { color: #00ff9d; font-weight: bold; }
         .log-entry.error { color: #ff4757; font-weight: bold; }
-        .log-entry.success { color: #2ed573; }
-        .log-entry.info { color: #70a1ff; }
+        #intelligence-report { margin-top: 20px; display: none; }
+        #intelligence-report img { max-width: 100%; border: 2px solid #00ff9d; }
+        #intelligence-report textarea { width: calc(100% - 20px); height: 300px; background-color: #000; color: #ddd; border: 1px solid #333; padding: 10px; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🚀 Mission Control</h1>
-        <p>Click the button below to start the mission and extract the link for "Thamma (2025)".</p>
+        <h1>🚀 Mission Control 2.0</h1>
         <button id="start-mission-btn">▶️ START MISSION</button>
-        
         <h4>Live Mission Logs:</h4>
         <div id="log-container">Awaiting mission start...</div>
+        <div id="intelligence-report">
+            <h4>🚨 Intelligence Report 🚨</h4>
+            <div id="screenshot-container"></div>
+            <div id="html-container"></div>
+        </div>
     </div>
 
     <script>
         const startBtn = document.getElementById('start-mission-btn');
         const logContainer = document.getElementById('log-container');
+        const reportDiv = document.getElementById('intelligence-report');
+        const screenshotContainer = document.getElementById('screenshot-container');
+        const htmlContainer = document.getElementById('html-container');
 
         startBtn.addEventListener('click', function() {
-            let eventSource;
-
             logContainer.innerHTML = '';
+            reportDiv.style.display = 'none';
+            screenshotContainer.innerHTML = '';
+            htmlContainer.innerHTML = '';
             startBtn.disabled = true;
             startBtn.textContent = 'MISSION IN PROGRESS...';
 
-            function addLog(message, type = '') {
-                const logEntry = document.createElement('div');
-                logEntry.className = `log-entry ${type}`;
-                logEntry.textContent = message;
-                logContainer.appendChild(logEntry);
+            function addLog(message) {
+                logContainer.innerHTML += `<div>${message}</div>`;
                 logContainer.scrollTop = logContainer.scrollHeight;
             }
 
-            eventSource = new EventSource('/build');
+            const eventSource = new EventSource('/build');
             
             eventSource.onmessage = function(event) {
                 const message = event.data;
-                console.log("Received data:", message);
 
                 if (message.startsWith('--LINK--')) {
                     const link = message.substring(8);
-                    addLog('--- LINK FOUND ---', 'link');
-                    
-                    const linkEntry = document.createElement('div');
-                    linkEntry.className = 'log-entry link';
-                    const linkAnchor = document.createElement('a');
-                    linkAnchor.href = link;
-                    linkAnchor.target = '_blank';
-                    linkAnchor.textContent = link;
-                    linkEntry.appendChild(linkAnchor);
-                    logContainer.appendChild(linkEntry);
-                    logContainer.scrollTop = logContainer.scrollHeight;
-                    
-                } else if (message.includes('❌')) {
-                    addLog(message, 'error');
-                } else if (message.includes('✅') || message.includes('✨')) {
-                    addLog(message, 'success');
-                } else if (message.includes('▶️') || message.includes('⏳')) {
-                    addLog(message, 'info');
+                    addLog(`<div class="log-entry link">🔗 <a href="${link}" target="_blank">${link}</a></div>`);
+                } else if (message.startsWith('--SCREENSHOT--')) {
+                    reportDiv.style.display = 'block';
+                    const base64Img = message.substring(14);
+                    screenshotContainer.innerHTML = `<h4>📸 Spy Cam Screenshot:</h4><img src="${base64Img}" alt="Spy Cam Screenshot">`;
+                } else if (message.startsWith('--HTML--')) {
+                    reportDiv.style.display = 'block';
+                    const htmlContent = message.substring(8);
+                    htmlContainer.innerHTML = `<h4>📄 X-Ray Vision (HTML Source):</h4><textarea readonly>${htmlContent}</textarea>`;
                 } else if (message.includes('--- MISSION COMPLETE ---')) {
-                    addLog(message, 'info');
+                    addLog(message);
                     eventSource.close();
                     startBtn.disabled = false;
                     startBtn.textContent = '▶️ START NEW MISSION';
@@ -84,7 +78,7 @@
             };
             
             eventSource.onerror = function() {
-                addLog('❌ CRITICAL: Connection to server lost. Mission aborted.', 'error');
+                addLog('<div class="log-entry error">❌ CRITICAL: Connection to server lost.</div>');
                 eventSource.close();
                 startBtn.disabled = false;
                 startBtn.textContent = '▶️ TRY AGAIN';
