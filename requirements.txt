@@ -1,5 +1,4 @@
-flask
-flask-cors
+quart
 playwright
-asyncio
-gunicorn  
+gunicorn
+hypercorn # Quart ke liye Gunicorn jaisa server
