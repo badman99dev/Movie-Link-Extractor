@@ -11,20 +11,17 @@ CORS(app)  # तुम्हारी लोकल HTML फ़ाइल से �
 def health_check():
     return jsonify({"status": "OK, I am alive! 🦾"})
 
-# हमारा मेन API endpoint, जहाँ से मिशन शुरू होगा
 @app.route('/api/start-mission', methods=['POST'])
 def start_mission():
     data = request.json
-    movie_name = data.get('movie_name')
+    movie_url = data.get('movie_url') # <-- Naam badal diya
 
-    if not movie_name:
-        return jsonify({"status": "error", "message": "Movie name is required."}), 400
+    if not movie_url:
+        return jsonify({"status": "error", "message": "Movie URL is required."}), 400
 
     try:
-        # Hdhub4uScraper क्लास का इस्तेमाल करके लिंक्स निकालते हैं
         scraper = Hdhub4uScraper()
-        # asyncio.run() का इस्तेमाल करके async scraper को चलाते हैं
-        links = asyncio.run(scraper.get_movie_links(movie_name))
+        links = asyncio.run(scraper.get_movie_links(movie_url)) # <-- Naya variable pass kiya
         
         if not links:
             return jsonify({"status": "error", "message": f"Could not find download links for '{movie_name}'."})
