@@ -3,11 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Efficient Live Mirror (with DOM Patching) ✨</title>
-    
-    <!-- We are importing the morphdom library from a CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/morphdom@2.7.0/dist/morphdom-umd.min.js"></script>
-    
+    <title>Advanced Remote Scraper Interface 🚀</title>
     <style>
         :root {
             --bg-dark: #1a1c20;
@@ -15,23 +11,17 @@
             --bg-terminal: #0d1117;
             --text-light: #e6edf3;
             --text-muted: #8b949e;
-            --accent-blue: #58a6ff;
             --accent-green: #3fb950;
-            --accent-red: #f85149;
-            --accent-orange: #f78166;
             --border-color: #30363d;
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             background-color: var(--bg-dark);
             color: var(--text-light);
             margin: 0;
             overflow: hidden;
         }
-        .main-container {
-            display: flex;
-            height: 100vh;
-        }
+        .main-container { display: flex; height: 100vh; }
         .control-panel {
             width: 35%;
             min-width: 450px;
@@ -43,63 +33,36 @@
             display: flex;
             flex-direction: column;
         }
-        .browser-mirror {
-            flex-grow: 1;
-            background-color: #fff;
+        .browser-mirror { flex-grow: 1; background-color: #fff; }
+        #live-iframe { width: 100%; height: 100%; border: none; }
+        h2 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .button-group { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 15px 0; }
+        button {
+            width: 100%; padding: 10px; font-size: 14px; font-weight: 500; cursor: pointer;
+            color: white; border: 1px solid var(--border-color); border-radius: 6px; transition: background-color 0.2s;
         }
-        #live-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        h2 {
-            margin-top: 0;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 10px;
-        }
-        #start-mission-btn {
-            background-color: var(--accent-green);
-            border: 1px solid rgba(240, 246, 252, 0.1);
-            width: 100%;
-            padding: 12px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            color: white;
-            border-radius: 6px;
-            transition: background-color 0.2s;
-            margin-bottom: 20px;
-        }
+        #start-mission-btn { background-color: var(--accent-green); border-color: rgba(240, 246, 252, 0.1); }
         #start-mission-btn:hover { background-color: #4ac260; }
-        #start-mission-btn:disabled { background-color: #2e343b; cursor: not-allowed; opacity: 0.6; }
-
+        .utility-btn { background-color: #373e47; }
+        .utility-btn:hover { background-color: #444c56; }
+        button:disabled { background-color: #2e343b; cursor: not-allowed; opacity: 0.6; }
         #log-container {
-            flex-grow: 1;
-            background-color: var(--bg-terminal);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 15px;
-            font-family: 'SF Mono', 'Consolas', 'Liberation Mono', Menlo, Courier, monospace;
-            font-size: 13px;
-            white-space: pre-wrap;
-            overflow-y: auto;
+            flex-grow: 1; background-color: var(--bg-terminal); border: 1px solid var(--border-color);
+            border-radius: 6px; padding: 15px; font-family: 'SF Mono', Consolas, monospace;
+            font-size: 13px; white-space: pre-wrap; overflow-y: auto;
         }
-        /* Log Colors */
-        .log-info { color: var(--accent-blue); }
-        .log-success { color: var(--accent-green); }
-        .log-error { color: var(--accent-red); }
-        .log-warning { color: var(--accent-orange); }
-        .log-link a { color: var(--accent-green); text-decoration: none; font-weight: bold; }
-        .log-link a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
     <div class="main-container">
         <div class="control-panel">
-            <h2>🚀 Efficient Control Panel</h2>
-            <button id="start-mission-btn">▶️ Start Live Sync</button>
+            <h2>🚀 Scraper Control</h2>
+            <button id="start-mission-btn">▶️ Start Mission</button>
+            <div class="button-group">
+                <button id="download-html-btn" class="utility-btn" disabled>📄 Download Last HTML Snapshot</button>
+            </div>
             <h4>Live Mission Logs:</h4>
-            <div id="log-container">Awaiting instructions...</div>
+            <div id="log-container">Awaiting mission start...</div>
         </div>
         <div class="browser-mirror">
             <iframe id="live-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
@@ -107,30 +70,37 @@
     </div>
 
     <script>
-        // --- Element References ---
         const startBtn = document.getElementById('start-mission-btn');
         const logContainer = document.getElementById('log-container');
         const liveIframe = document.getElementById('live-iframe');
+        const downloadHtmlBtn = document.getElementById('download-html-btn');
+        
+        let lastHtmlContent = '';
 
-        // --- UI Functions ---
-        function addLog(message, type = '') {
-            const logEntry = document.createElement('div');
-            if (type) logEntry.classList.add(type);
-            logEntry.innerHTML = message; // Use innerHTML to render links
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
+        function downloadFile(content, fileName, contentType) {
+            const a = document.createElement("a");
+            const file = new Blob([content], { type: contentType });
+            a.href = URL.createObjectURL(file);
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
         }
 
-        // --- Main Logic ---
+        downloadHtmlBtn.addEventListener('click', () => {
+            if (lastHtmlContent) {
+                downloadFile(lastHtmlContent, 'snapshot_at_failure.html', 'text/html');
+            }
+        });
+
         startBtn.addEventListener('click', function() {
             logContainer.innerHTML = '';
             startBtn.disabled = true;
-            startBtn.textContent = 'Sync in Progress...';
+            downloadHtmlBtn.disabled = true;
+            startBtn.textContent = 'Mission in Progress...';
             
-            // Initialize the iframe with a blank but valid HTML structure
             const iframeDoc = liveIframe.contentWindow.document;
             iframeDoc.open();
-            iframeDoc.write('<html><head><base href="https://www.google.com/"></head><body><div style="font-family: sans-serif; padding: 20px;">Waiting for first sync...</div></body></html>');
+            iframeDoc.write('<html><body></body></html>');
             iframeDoc.close();
             
             const eventSource = new EventSource('/build');
@@ -139,42 +109,25 @@
                 const message = event.data;
 
                 if (message.startsWith('--HTML-SNAPSHOT--')) {
-                    const newHtmlString = message.substring(17);
-                    
-                    // #################################################
-                    // ##### THE MORPHDOM MAGIC! #####
-                    // #################################################
-                    
-                    const currentDOM = iframeDoc.documentElement; // Get the whole <html> element
-                    
-                    // Use morphdom to efficiently update the iframe's entire DOM
-                    // This is better than just the body as it also updates the head (e.g., title)
-                    morphdom(currentDOM, newHtmlString);
-                    
-                } else if (message.startsWith('--LINK--')) {
-                    addLog(`🔗 <strong>LINK:</strong> <a href="${message.substring(8)}" target="_blank">Final URL</a>`, 'log-link');
-
+                    lastHtmlContent = message.substring(17);
+                    iframeDoc.open();
+                    iframeDoc.write(`<base href="https://app.fireworks.ai/">` + lastHtmlContent);
+                    iframeDoc.close();
+                    downloadHtmlBtn.disabled = false;
                 } else if (message.includes('--- MISSION COMPLETE ---')) {
-                    addLog(message, 'log-success');
+                    logContainer.innerHTML += `<div>${message}</div>`;
                     eventSource.close();
                     startBtn.disabled = false;
-                    startBtn.textContent = '▶️ Start New Sync';
-                
+                    startBtn.textContent = '▶️ Start New Mission';
                 } else {
-                    let type = '';
-                    if (message.includes('❌') || message.includes('failed')) type = 'log-error';
-                    else if (message.includes('✅') || message.includes('✨')) type = 'log-success';
-                    else if (message.includes('⚠️')) type = 'log-warning';
-                    else if (message.includes('▶️') || message.includes('🕵️‍♂️') || message.includes('💣')) type = 'log-info';
-                    addLog(message, type);
+                    logContainer.innerHTML += `<div>${message}</div>`;
+                    logContainer.scrollTop = logContainer.scrollHeight;
                 }
             };
             
             eventSource.onerror = function() {
-                addLog('❌ CRITICAL: Connection to server lost.', 'log-error');
+                logContainer.innerHTML += '<div>❌ Connection lost.</div>';
                 eventSource.close();
-                startBtn.disabled = false;
-                startBtn.textContent = '▶️ Try Again';
             };
         });
     </script>
