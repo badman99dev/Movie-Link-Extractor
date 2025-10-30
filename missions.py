@@ -2,70 +2,66 @@ import asyncio
 
 # =============================================================
 # MISSION BLUEPRINTS
-# Define all your different missions here as functions.
 # =============================================================
 
-async def mission_google_to_wikipedia(page, yield_log):
+async def mission_fireworks_signup(page, yield_log):
     """
-    Mission: Go to Google, search for Wikipedia, navigate to it, 
-    and then search for 'Amitabh Bachchan'.
+    Mission: Automate the signup process on app.fireworks.ai.
     """
-    await yield_log("MISSION: Google -> Wikipedia -> Amitabh Bachchan")
+    await yield_log("MISSION: Fireworks AI Signup Automation")
 
-    await yield_log("🌐 Navigating to www.google.com...")
-    await page.goto("https://www.google.com", wait_until="load")
-    await yield_log("✅ Google page loaded.")
-    await asyncio.sleep(2)
+    # --- Step 1: Navigate to the Signup Page ---
+    target_url = "https://app.fireworks.ai/signup"
+    await yield_log(f"🌐 Navigating to {target_url}...")
+    await page.goto(target_url, wait_until="load")
+    await yield_log("✅ Signup page loaded.")
+    await asyncio.sleep(4)
 
-    search_box = page.locator('textarea[name="q"]')
-    await yield_log("🎯 Typing 'Wikipedia'...")
-    await search_box.fill("Wikipedia")
-    await asyncio.sleep(2)
+    # --- Step 2: Fill in the Email Address ---
+    # From the source, the email input is: <input type="email" name="email">
+    email_selector = 'input[name="email"]'
+    email_to_fill = "savannapatte.r.so.n7.04@gmail.com"
+    await yield_log(f"🎯 Typing email '{email_to_fill}'...")
+    await page.locator(email_selector).fill(email_to_fill)
+    await asyncio.sleep(4)
 
-    await yield_log("⌨️ Pressing Enter...")
-    await search_box.press('Enter')
-    await page.wait_for_load_state("load")
-    
-    wiki_link = page.locator('a[href*="wikipedia.org"]').first
-    await yield_log("🎯 Clicking Wikipedia link...")
-    await wiki_link.click()
-    await page.wait_for_load_state("load")
-    await yield_log("✅ Wikipedia loaded.")
-    await asyncio.sleep(2)
+    # --- Step 3: Click the "Next" Button ---
+    # From the source: <button type="submit">Next</button>
+    next_button_selector = 'button[type="submit"]:has-text("Next")'
+    await yield_log(f"🖱️ Clicking 'Next' button...")
+    await page.locator(next_button_selector).click()
+    await yield_log("✅ Clicked! Waiting for password page...")
+    # We wait for the new elements to appear instead of a full page load
+    await asyncio.sleep(4)
 
-    wiki_search_box = page.locator('input[name="search"]')
-    await yield_log("🎯 Typing 'Amitabh Bachchan'...")
-    await wiki_search_box.fill("Amitabh Bachchan")
-    await asyncio.sleep(2)
-    
-    await yield_log("⌨️ Clicking search button...")
-    await page.locator('button:has-text("Search")').click()
-    await page.wait_for_load_state("load")
-    
-    return page.url
+    # --- Step 4: Fill in the Password Fields ---
+    # Modern apps often have password fields with name="password" and name="confirmPassword"
+    password_selector = 'input[name="password"]'
+    confirm_password_selector = 'input[name="confirmPassword"]' # This is a common name, might need adjustment
+    strong_password = "TestPassword@12345" # A sample strong password
 
-async def mission_get_imdb_rating(page, yield_log):
-    """
-    Mission: Go to IMDb, search for 'Inception', and extract its rating.
-    """
-    await yield_log("MISSION: Find IMDb Rating for 'Inception'")
+    await yield_log(f"🔑 Typing a strong password...")
+    # It's better to wait for the element to be visible before filling
+    await page.locator(password_selector).wait_for(state="visible", timeout=30000)
+    await page.locator(password_selector).fill(strong_password)
     
-    await yield_log("🌐 Navigating to www.imdb.com...")
-    await page.goto("https://www.imdb.com/", wait_until="load")
-    await asyncio.sleep(2)
+    await yield_log(f"🔑 Confirming the password...")
+    await page.locator(confirm_password_selector).fill(strong_password)
+    await asyncio.sleep(4)
+
+    # --- Step 5: Click the "Continue" Button ---
+    # The button text will likely change to "Continue" or "Sign Up"
+    continue_button_selector = 'button[type="submit"]:has-text("Continue")'
+    await yield_log(f"🖱️ Clicking 'Continue' button...")
+    await page.locator(continue_button_selector).click()
+    await yield_log("✅ Clicked 'Continue'!")
     
-    search_box = page.locator('input#suggestion-search')
-    await yield_log("🎯 Typing 'Inception'...")
-    await search_box.fill("Inception")
-    await search_box.press('Enter')
-    await page.wait_for_load_state("load")
-    await asyncio.sleep(2)
-    
-    rating_element = page.locator('[data-testid="hero-rating-bar__aggregate-rating__score"] span').first
-    await yield_log("⭐ Finding the rating...")
-    rating = await rating_element.inner_text()
-    
-    return f"The rating for Inception is {rating}/10"
+    # --- Step 6: Final Wait ---
+    await yield_log("⏳ Final 15-second observation period commencing...")
+    await asyncio.sleep(15)
+    await yield_log("✅ Observation complete.")
+
+    return page.url # Return the final URL
 
 
 # =============================================================
@@ -73,7 +69,4 @@ async def mission_get_imdb_rating(page, yield_log):
 # This is the ONLY part you need to change to switch missions.
 # =============================================================
 
-# Simply set `active_mission` to the function name of the mission you want to run.
-active_mission = mission_google_to_wikipedia
-# To run the IMDb mission instead, you would change the line above to:
-# active_mission = mission_get_imdb_rating
+active_mission = mission_fireworks_signup
