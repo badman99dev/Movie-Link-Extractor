@@ -1,6 +1,7 @@
 from quart import Quart, Response, render_template, stream_with_context
 from scraper import ScraperEngine
-from missions import mission_google_to_wikipedia # Import the specific mission we want to run
+# Import the specific 'active_mission' variable from the missions file
+from missions import active_mission
 import os
 
 app = Quart(__name__)
@@ -16,8 +17,9 @@ async def run_mission_endpoint():
     async def log_streamer():
         engine = ScraperEngine()
         try:
-            # We tell the engine to run the `mission_google_to_wikipedia` mission
-            async for log_entry in engine.run_mission(mission_google_to_wikipedia):
+            # We tell the engine to run whatever mission is currently active.
+            # We don't care what its name is.
+            async for log_entry in engine.run_mission(active_mission):
                 yield f"data: {log_entry}\n\n"
         except Exception as e:
             yield f"data: ❌ Final error in app: {e}\n\n"
