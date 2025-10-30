@@ -9,11 +9,12 @@ if not BROWSERLESS_API_KEY:
     
 BROWSERLESS_ENDPOINT = f'wss://production-sfo.browserless.io?token={BROWSERLESS_API_KEY}'
 
-class LiveInspector:
+class ScraperEngine:
     
-    async def run_test_mission(self):
+    async def run_mission(self, mission_function):
         start_time = time.time()
         
+        # Helper functions are now part of the engine
         def log_message(message):
             elapsed_time = f"[{time.time() - start_time:.2f}s]"
             return f"{elapsed_time} {message}"
@@ -24,67 +25,29 @@ class LiveInspector:
             yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
 
         async with async_playwright() as p:
-            yield log_message("▶️ Initiating 'Project Source Inspector'...")
+            yield log_message("▶️ Scraper Engine Initializing...")
             browser, context, page = None, None, None
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
                 context = await browser.new_context(viewport={'width': 1280, 'height': 800})
                 page = await context.new_page()
-                yield log_message("✅ Connection successful!")
+                yield log_message("✅ Engine Online. Handing over control to mission plan...")
             except Exception as e:
-                yield log_message(f"❌ Connection failed: {e}")
+                yield log_message(f"❌ Engine Failure: {e}")
                 raise
 
             try:
-                # --- Step 1: Go to view-page-source.com ---
-                target_url = "https://www.view-page-source.com/"
-                yield log_message(f"🌐 Navigating to {target_url}...")
-                await page.goto(target_url, wait_until="load")
-                yield log_message("✅ Homepage loaded.")
-                async for log in yield_html_snapshot(page, "On homepage"): yield log
-                await asyncio.sleep(3)
+                # This is the magic. The engine calls the mission function we pass to it.
+                # It provides the `page` object and a way to send logs back.
+                async def send_log(message):
+                    yield log_message(message)
+                    # Every time the mission sends a log, we also send an HTML snapshot.
+                    async for log in yield_html_snapshot(page, "Live Update"): yield log
 
-                # --- Step 2: Fill the URL input field ---
-                # From the source code, the input has id="uri"
-                url_input_selector = '#uri'
-                yield log_message(f"🎯 Typing 'www.google.com' into input box: {url_input_selector}")
-                await page.locator(url_input_selector).fill("www.google.com")
-                async for log in yield_html_snapshot(page, "After typing URL"): yield log
-                await asyncio.sleep(3)
-
-                # --- Step 3: Click the submit button ---
-                # From the source, the button is: <input value="View Source Code" type="submit">
-                submit_button_selector = 'input[type="submit"][value="View Source Code"]'
-                yield log_message(f"🖱️ Clicking the submit button: {submit_button_selector}")
-                await page.locator(submit_button_selector).click()
+                final_url = await mission_function(page, send_log)
                 
-                yield log_message("✅ Clicked! Waiting for source code results page to load...")
-                await page.wait_for_load_state("load", timeout=60000) # Wait up to 60s for results
-                yield log_message("✅ Source code page loaded.")
-                async for log in yield_html_snapshot(page, "On results page"): yield log
-                await asyncio.sleep(3)
-
-                # --- Step 4: Scroll to the footer and click 'Security' ---
-                # From the source, the link is in the footer: <li><a href=".../security-policy/" title="Security">Security</a></li>
-                security_link_selector = 'footer a[title="Security"]'
-                yield log_message(f"👇 Scrolling to the footer to find the 'Security' link...")
-                security_link = page.locator(security_link_selector)
-                
-                # Scroll the element into view before clicking
-                await security_link.scroll_into_view_if_needed()
-                yield log_message(f"🎯 Found 'Security' link. Now clicking it...")
-                async for log in yield_html_snapshot(page, "After scrolling to footer"): yield log
-                await asyncio.sleep(2)
-                
-                await security_link.click()
-                
-                yield log_message("✅ Clicked! Waiting for the final page to load...")
-                await page.wait_for_load_state("load")
-                yield log_message("✅ Final 'Security Policy' page loaded!")
-                async for log in yield_html_snapshot(page, "On final page"): yield log
-                
-                yield log_message(f"✨ MISSION ACCOMPLISHED! Test completed successfully.")
-                yield f"--LINK--{page.url}" # Return the final URL
+                yield log_message(f"✨ MISSION ACCOMPLISHED!")
+                yield f"--LINK--{final_url}"
 
             except Exception as e:
                 error_message = str(e).split('Call log:')[0].strip()
@@ -93,7 +56,7 @@ class LiveInspector:
                     async for log in yield_html_snapshot(page, "At the moment of failure"): yield log
                 raise
             finally:
-                yield log_message("🚪 Closing browser session...")
+                yield log_message("🚪 Shutting down engine...")
                 if context: await context.close()
                 if browser: await browser.close()
                 yield "--- MISSION COMPLETE ---"
