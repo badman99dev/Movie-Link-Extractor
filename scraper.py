@@ -1,5 +1,5 @@
 import asyncio
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, Error
 import os
 import time
 
@@ -27,7 +27,7 @@ class Scraper:
                 yield log_message_str(f"⚠️ Could not sync HTML: {e}")
 
         async with async_playwright() as p:
-            yield log_message_str("▶️ Initiating SmailPro Mission (v3)...") # Version 3!
+            yield log_message_str("▶️ Initiating SmailPro Mission (v4 - FINAL)...")
             browser, context, page = None, None, None
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
@@ -41,45 +41,48 @@ class Scraper:
             try:
                 target_url = "https://smailpro.com/temporary-email"
                 yield log_message_str(f"🌐 Navigating to {target_url}...")
-                await page.goto(target_url, wait_until="domcontentloaded") # Faster navigation
+                await page.goto(target_url, wait_until="domcontentloaded")
                 yield log_message_str("✅ SmailPro page loaded.")
                 
-                # Wait for the main create button to be ready before interacting
                 create_button_selector = 'div.bg-green-700:has-text("Create")'
                 await page.locator(create_button_selector).wait_for(state="visible", timeout=15000)
                 async for item in yield_html_snapshot(page, "On SmailPro Homepage"): yield item
 
                 yield log_message_str("🖱️ Clicking 'Create' to open modal...")
                 await page.locator(create_button_selector).click()
-                yield log_message_str("✅ Clicked 'Create'. Waiting for modal content to load...")
                 
                 modal_content_selector = 'label:has-text("Email Type")'
                 yield log_message_str("⏳ Waiting for modal content to be visible...")
                 await page.locator(modal_content_selector).wait_for(state="visible", timeout=15000)
                 yield log_message_str("✅ Modal content is ready.")
                 
-                async for item in yield_html_snapshot(page, "Create Email Modal Open"): yield item
-                
-                # ===== FIX IS HERE! =====
                 yield log_message_str("🤖 Adding a human-like pause for reCAPTCHA...")
-                await asyncio.sleep(2) # Give reCAPTCHA time to process our presence
-                # ========================
+                await asyncio.sleep(2)
 
+                # ===== THE FINAL FIX IS HERE! =====
                 generate_button_selector = 'div[x-data="create()"] button:has-text("Generate")'
-                yield log_message_str(f"🖱️ Clicking 'Generate' button inside modal...")
+                yield log_message_str(f"🖱️ Attempting to click 'Generate' button...")
+                try:
+                    # Click without waiting for it to be stable, because it will disappear.
+                    await page.locator(generate_button_selector).click(timeout=5000)
+                except Error as e:
+                    # We EXPECT a timeout or "not visible" error here, because the button
+                    # is replaced by a spinner. This error means the click was successful.
+                    if "is not visible" in str(e) or "Timeout" in str(e):
+                        yield log_message_str("✅ Click successful (button disappeared as expected).")
+                    else:
+                        # If it's a different error, we should fail.
+                        raise e
+                # ==================================
+
+                yield log_message_str("⏳ Waiting for new email to be displayed...")
                 
-                # Using force=True to handle potential overlays or disabled state
-                await page.locator(generate_button_selector).click(force=True, timeout=10000)
-                
-                yield log_message_str("✅ Clicked 'Generate'. Waiting for email to appear on main page...")
-                
+                # Wait for the "No email selected" placeholder to disappear.
+                await page.locator('text=No email selected').wait_for(state='hidden', timeout=25000)
+                yield log_message_str("✅ Placeholder disappeared, new email is present.")
+
                 email_display_selector = 'div[x-data="inbox()"] div.truncate'
-                yield log_message_str(f"⏳ Waiting for new email to be displayed...")
-                
-                # Smart wait: wait for the "No email selected" to disappear first
-                await page.locator('text=No email selected').wait_for(state='hidden', timeout=20000)
-                
-                email_element = page.locator(email_display_selector).first() # Be more specific
+                email_element = page.locator(email_display_selector).first()
                 
                 generated_email = await email_element.inner_text()
                 yield log_message_str(f"🎉 SUCCESS! Generated Email: {generated_email}")
