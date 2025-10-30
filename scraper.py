@@ -1,3 +1,4 @@
+
 import asyncio
 from playwright.async_api import async_playwright
 import os
@@ -19,7 +20,7 @@ class ScraperEngine:
             return f"{elapsed_time} {message}"
         
         async with async_playwright() as p:
-            yield log_message("▶️ Scraper Engine Initializing...")
+            yield log_message("▶️ Scraper Engine Initializing (v3 - Stable)...")
             browser, context, page = None, None, None
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
@@ -31,37 +32,30 @@ class ScraperEngine:
                 raise
 
             try:
-                log_queue = []
+                # #################################################
+                # ##### THE CORRECTED LOGIC! #####
+                # #################################################
                 
-                async def add_log_to_queue(message):
-                    log_queue.append(message)
+                # Helper function to send logs
+                async def send_log(message):
+                    yield log_message(message)
+                
+                # Helper function to send HTML
+                async def send_html_snapshot(description):
+                    yield log_message(f"🔄 Syncing HTML: {description}")
+                    try:
+                        html_content = await page.content()
+                        yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
+                    except Exception as e:
+                        yield log_message(f"⚠️ Could not sync HTML: {e}")
 
-                mission_task = asyncio.create_task(mission_function(page, add_log_to_queue))
+                # The engine now directly awaits the mission generator.
+                # The mission itself is now in full control of logging and snapshots.
+                async for log_entry in mission_function(page, send_log, send_html_snapshot):
+                    yield log_entry
 
-                # #################################################
-                # ##### THE RACE CONDITION FIX! #####
-                # #################################################
-                # Wait for the VERY FIRST navigation to complete before we start
-                # our snapshot loop. This ensures the page is in a stable state.
-                yield log_message("⏳ Waiting for initial page navigation to complete...")
-                await page.wait_for_load_state("load", timeout=60000)
-                yield log_message("✅ Initial page is stable. Starting live sync.")
-                # #################################################
-
-                while not mission_task.done():
-                    while log_queue:
-                        yield log_message(log_queue.pop(0))
-                    
-                    html_content = await page.content()
-                    yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
-                    
-                    await asyncio.sleep(1)
-
-                # Process any final logs from the mission
-                while log_queue:
-                    yield log_message(log_queue.pop(0))
-
-                final_url = await mission_task
+                # The mission will return the final URL at the end
+                final_url = page.url # Get the final url after the generator is done
                 
                 yield log_message(f"✨ MISSION ACCOMPLISHED!")
                 yield f"--LINK--{final_url}"
@@ -69,7 +63,6 @@ class ScraperEngine:
             except Exception as e:
                 error_message = str(e).split('Call log:')[0].strip()
                 yield log_message(f"❌ MISSION FAILED: {error_message}")
-                # Don't try to get content here, as the page might still be unstable
                 raise
             finally:
                 yield log_message("🚪 Shutting down engine...")
