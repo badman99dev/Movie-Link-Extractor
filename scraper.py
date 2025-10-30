@@ -27,7 +27,7 @@ class Scraper:
                 yield log_message(f"⚠️ Could not sync HTML: {e}")
 
         async with async_playwright() as p:
-            yield log_message("▶️ Initiating Final Stand...")
+            yield log_message("▶️ Initiating Final Stand (Corrected)...")
             browser, context, page = None, None, None
             try:
                 browser = await p.chromium.connect_over_cdp(BROWSERLESS_ENDPOINT)
@@ -39,7 +39,7 @@ class Scraper:
                 raise
 
             try:
-                # --- Step 1: Navigate to the Signup Page ---
+                # --- Step 1: Navigate ---
                 target_url = "https://app.fireworks.ai/signup"
                 yield log_message(f"🌐 Navigating to {target_url}...")
                 await page.goto(target_url, wait_until="load")
@@ -47,44 +47,56 @@ class Scraper:
                 async for item in yield_html_snapshot(page, "On Signup Page"): yield item
                 await asyncio.sleep(4)
 
-                # --- Step 2: Fill in the Email Address ---
+                # --- Step 2: Fill Email ---
                 email_selector = 'input[name="email"]'
-                email_to_fill = "savannapatte.r.so.n7.04@gmail.com"
-                yield log_message(f"🎯 Typing email...")
-                await page.locator(email_selector).fill(email_to_fill)
+                await yield_log("🎯 Typing email...")
+                await page.locator(email_selector).fill("savannapatte.r.so.n7.04@gmail.com")
                 async for item in yield_html_snapshot(page, "After typing email"): yield item
                 await asyncio.sleep(4)
 
-                # --- Step 3: Click the "Next" Button ---
+                # --- Step 3: Click Next ---
                 next_button_selector = 'button[type="submit"]:has-text("Next")'
-                yield log_message(f"🖱️ Clicking 'Next' button...")
+                await yield_log("🖱️ Clicking 'Next'...")
                 await page.locator(next_button_selector).click()
-                yield log_message("✅ Clicked! Waiting for password page to render...")
+                await yield_log("✅ Clicked! Waiting for password page...")
                 await asyncio.sleep(4)
                 async for item in yield_html_snapshot(page, "On Password Page"): yield item
 
-                # --- Step 4: Fill in the Password Fields ---
+                # --- Step 4: Fill Passwords ---
                 password_selector = 'input[name="password"]'
                 confirm_password_selector = 'input[name="confirmPassword"]'
                 strong_password = "TestPassword@12345"
 
-                yield log_message(f"🔑 Typing password...")
+                await yield_log("🔑 Typing password...")
                 await page.locator(password_selector).wait_for(state="visible", timeout=30000)
                 await page.locator(password_selector).fill(strong_password)
                 
-                yield log_message(f"🔑 Confirming password...")
+                await yield_log("🔑 Confirming password...")
                 await page.locator(confirm_password_selector).fill(strong_password)
                 async for item in yield_html_snapshot(page, "After typing passwords"): yield item
-                await asyncio.sleep(4)
+                await asyncio.sleep(2)
 
-                # --- Step 5: Click the "Continue" Button ---
-                continue_button_selector = 'button[type="submit"]:has-text("Continue")'
-                yield log_message(f"🖱️ Clicking 'Continue' button...")
-                await page.locator(continue_button_selector).click()
-                yield log_message("✅ Clicked 'Continue'!")
+                # #################################################
+                # ##### THE SNAPSHOT-BASED FIX! #####
+                # #################################################
+
+                # Step 5: Unfocus to enable the button (CRITICAL!)
+                heading_selector = 'h2:has-text("Create Account")'
+                await yield_log("🎯 Clicking on heading to trigger validation...")
+                await page.locator(heading_selector).click()
+                await asyncio.sleep(2) # Give JS time to enable the button
+                async for item in yield_html_snapshot(page, "After unfocusing"): yield item
+
+                # Step 6: Click the CORRECT "Create Account" button
+                create_account_button_selector = 'button[type="submit"]:has-text("Create Account")'
+                await yield_log(f"🖱️ Clicking the correct '{create_account_button_selector}' button...")
+                await page.locator(create_account_button_selector).click()
+                await yield_log("✅ Clicked 'Create Account'!")
                 
-                # --- Step 6: Final Wait ---
-                yield log_message("⏳ Final 15-second observation period...")
+                # #################################################
+                
+                # Step 7: Final Wait
+                await yield_log("⏳ Final 15-second observation...")
                 await asyncio.sleep(15)
                 async for item in yield_html_snapshot(page, "Final State"): yield item
 
