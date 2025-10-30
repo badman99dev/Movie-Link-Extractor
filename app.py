@@ -1,7 +1,5 @@
 from quart import Quart, Response, render_template, stream_with_context
-from scraper import ScraperEngine
-# Import the specific 'active_mission' variable from the missions file
-from missions import active_mission
+from scraper import Scraper # Import the single Scraper class
 import os
 
 app = Quart(__name__)
@@ -15,14 +13,16 @@ async def run_mission_endpoint():
     
     @stream_with_context
     async def log_streamer():
-        engine = ScraperEngine()
+        # Create an instance of our simple, all-in-one scraper
+        scraper = Scraper()
         try:
-            # We tell the engine to run whatever mission is currently active.
-            # We don't care what its name is.
-            async for log_entry in engine.run_mission(active_mission):
-                yield f"data: {log_entry}\n\n"
+            # Directly call the mission. No more passing functions around.
+            async for log_entry in scraper.run_fireworks_mission():
+                # No need to check the format, the scraper now sends SSE format directly
+                yield log_entry
         except Exception as e:
-            yield f"data: ❌ Final error in app: {e}\n\n"
+            # Just in case an error escapes the scraper
+            yield f"data: ❌ Final unhandled error in app: {e}\n\n"
 
     return Response(log_streamer(), mimetype='text/event-stream')
 
