@@ -14,16 +14,11 @@ class ScraperEngine:
     async def run_mission(self, mission_function):
         start_time = time.time()
         
-        # Helper functions are now part of the engine
+        # Helper function for basic log messages
         def log_message(message):
             elapsed_time = f"[{time.time() - start_time:.2f}s]"
             return f"{elapsed_time} {message}"
         
-        async def yield_html_snapshot(page, description):
-            yield log_message(f"🔄 Syncing HTML: {description}")
-            html_content = await page.content()
-            yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
-
         async with async_playwright() as p:
             yield log_message("▶️ Scraper Engine Initializing...")
             browser, context, page = None, None, None
@@ -37,14 +32,37 @@ class ScraperEngine:
                 raise
 
             try:
-                # This is the magic. The engine calls the mission function we pass to it.
-                # It provides the `page` object and a way to send logs back.
-                async def send_log(message):
-                    yield log_message(message)
-                    # Every time the mission sends a log, we also send an HTML snapshot.
-                    async for log in yield_html_snapshot(page, "Live Update"): yield log
+                # #################################################
+                # ##### THE CORRECTED LOGIC! #####
+                # #################################################
 
-                final_url = await mission_function(page, send_log)
+                # We create a simple log queue (a list)
+                log_queue = []
+                
+                # This simple async function will be passed to the mission.
+                # It just adds logs to our queue.
+                async def add_log_to_queue(message):
+                    log_queue.append(message)
+
+                # We start the mission in the background.
+                # It will run its steps and add logs to the queue.
+                mission_task = asyncio.create_task(mission_function(page, add_log_to_queue))
+
+                # While the mission is running, our main loop will process the queue
+                while not mission_task.done():
+                    # Send any logs that the mission has generated
+                    while log_queue:
+                        yield log_message(log_queue.pop(0))
+                    
+                    # Send an HTML snapshot
+                    html_content = await page.content()
+                    yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
+                    
+                    # Wait a bit before the next update
+                    await asyncio.sleep(1) # Controls the "frame rate" of the mirror
+
+                # Get the final result from the completed mission task
+                final_url = await mission_task
                 
                 yield log_message(f"✨ MISSION ACCOMPLISHED!")
                 yield f"--LINK--{final_url}"
@@ -53,7 +71,8 @@ class ScraperEngine:
                 error_message = str(e).split('Call log:')[0].strip()
                 yield log_message(f"❌ MISSION FAILED: {error_message}")
                 if page and not page.is_closed():
-                    async for log in yield_html_snapshot(page, "At the moment of failure"): yield log
+                    html_content = await page.content()
+                    yield f"--HTML-SNAPSHOT--{html_content.replace(chr(10), '').replace(chr(13), '')}"
                 raise
             finally:
                 yield log_message("🚪 Shutting down engine...")
